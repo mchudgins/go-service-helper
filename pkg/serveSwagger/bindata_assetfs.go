@@ -13,7 +13,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"fmt"
-	"log"
 	"io"
 	"io/ioutil"
 	"os"
@@ -307,7 +306,6 @@ func _filePath(dir, name string) string {
 
 func assetFS() *assetfs.AssetFS {
 	for k := range _bintree.Children {
-		log.Printf( "Asset: %v, AssetDir: %v", Asset, AssetDir )
 		return &assetfs.AssetFS{Asset: Asset, AssetDir: AssetDir, AssetInfo: AssetInfo, Prefix: k}
 	}
 	panic("unreachable")
