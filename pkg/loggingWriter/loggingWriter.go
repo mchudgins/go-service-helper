@@ -53,9 +53,10 @@ func HttpLogger(h http.Handler) http.Handler {
 		defer func() {
 			end := time.Now()
 			duration := end.Sub(start)
-			log.Printf("host: %s; uri: %s; remoteAddress: %s; method:  %s; proto: %s; status: %d, contentLength: %d, duration: %.3f; ua: %s",
+			log.Printf("host: %s; uri: %s; CorrelationID: %s; remoteAddress: %s; method:  %s; proto: %s; status: %d, contentLength: %d, duration: %.3f; ua: %s",
 				r.Host,
 				r.RequestURI,
+				lw.Header().Get("X-Correlation-ID"),
 				r.RemoteAddr,
 				r.Method,
 				r.Proto,
