@@ -4,6 +4,8 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/Sirupsen/logrus"
 )
 
 type loggingWriter struct {
@@ -46,7 +48,7 @@ func (l *loggingWriter) StatusCode() int {
 }
 
 // httpLogger provides per request log statements (ala Apache httpd)
-func HttpLogger(h http.Handler) http.Handler {
+func HttpApacheLogger(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		lw := NewLoggingWriter(w)
@@ -64,6 +66,35 @@ func HttpLogger(h http.Handler) http.Handler {
 				lw.Length(),
 				duration.Seconds()*1000,
 				r.UserAgent())
+		}()
+
+		h.ServeHTTP(lw, r)
+
+	})
+}
+
+func HTTPLogrusLogger(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		lw := NewLoggingWriter(w)
+		defer func() {
+			end := time.Now()
+			duration := end.Sub(start)
+
+			fields := logrus.Fields{}
+			for key := range r.Header {
+				fields[key] = r.Header.Get(key)
+			}
+			fields["Host"] = r.Host
+			fields["URL"] = r.URL.Path
+			fields["remoteIP"] = r.RemoteAddr
+			fields["method"] = r.Method
+			fields["proto"] = r.Proto
+			fields["status"] = lw.statusCode
+			fields["length"] = lw.Length()
+			fields["duration"] = duration.Seconds() * 1000
+
+			logrus.WithFields(fields).Info("")
 		}()
 
 		h.ServeHTTP(lw, r)
