@@ -103,7 +103,7 @@ func init() {
 }
 
 func (h *hystrixHelper) IncrementAttempts() {
-	hystrixAttempts.With(prometheus.Labels{"circuit" : h.commandName}).Inc()
+	hystrixAttempts.With(prometheus.Labels{"circuit": h.commandName}).Inc()
 }
 
 func (h *hystrixHelper) IncrementErrors() {
@@ -153,4 +153,3 @@ func (h *hystrixHelper) Reset() {
 func (h *hystrixHelper) NewPrometheusCollector(name string) metricCollector.MetricCollector {
 	return h
 }
-
