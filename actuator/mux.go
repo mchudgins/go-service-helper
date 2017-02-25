@@ -4,11 +4,16 @@ package actuator
 // query for the valid url's of the service.
 
 import (
+	"encoding/json"
+	"encoding/xml"
+	template "html/template"
 	"net/http"
+	"os"
 	"sort"
-	"strings"
 	"sync"
-	"text/template"
+
+	log "github.com/Sirupsen/logrus"
+	"github.com/golang/gddo/httputil/header"
 )
 
 type ActuatorMux struct {
@@ -21,24 +26,32 @@ type ActuatorMux struct {
 
 const (
 	html = `
-`
-
-	json = `
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>Site Map</title>
+</head>
+<body>
+<h1>Site Map</h1>
+<ul>
+{{range .Mappings}}<li><a href={{.}}>{{.}}</a></li>{{end}}
+</ul>
+</body>
+</html>
 `
 
 	text = `
+{{range .Mappings}}{{.}}
+{{end}}
 `
 )
 
 var (
 	htmlTemplate = template.Must(template.New("html").Parse(html))
-	jsonTemplate = template.Must(template.New("json").Parse(json))
 	textTemplate = template.Must(template.New("text").Parse(text))
 )
-
-func init() {
-
-}
 
 func NewActuatorMux(mappingURL string) *ActuatorMux {
 	mux := http.NewServeMux()
@@ -74,7 +87,7 @@ func (m *ActuatorMux) Handler(r *http.Request) (h http.Handler, pattern string) 
 }
 
 func (m *ActuatorMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if strings.Compare(m.mappingURL, r.URL.Path) == 0 {
+	if m.mappingURL == r.URL.Path {
 		m.displayEndpoints(w, r)
 	} else {
 		m.ServeMux.ServeHTTP(w, r)
@@ -88,6 +101,7 @@ func (m *ActuatorMux) addMapping(pattern string) {
 	m.mutex.Unlock()
 }
 
+// display the endpoints
 func (m *ActuatorMux) displayEndpoints(w http.ResponseWriter, r *http.Request) {
 	if m.fDirty {
 		m.mutex.Lock()
@@ -96,4 +110,70 @@ func (m *ActuatorMux) displayEndpoints(w http.ResponseWriter, r *http.Request) {
 		m.mutex.Unlock()
 	}
 
+	hostname, err := os.Hostname()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	responseType := "text/text"
+	view := textTemplate
+
+	specs := header.ParseAccept(r.Header, "Accept")
+	for _, spec := range specs {
+		log.Infof("spec Q: %f, type: %s", spec.Q, spec.Value)
+		if spec.Q == 1.0 && spec.Value == "application/xml" {
+			responseType = "application/xml"
+			break
+		}
+		if spec.Q == 1.0 && spec.Value == "application/javascript" {
+			responseType = "application/javascript"
+			break
+		}
+
+		if spec.Q == 1.0 && spec.Value == "text/html" {
+			responseType = "text/html"
+			view = htmlTemplate
+			break
+		}
+	}
+
+	w.Header().Add("Content-Type", responseType)
+
+	if responseType == "text/html" || responseType == "text/text" {
+		type data struct {
+			Hostname string
+			URL      string
+			Handler  string
+			Mappings []string
+		}
+
+		err = view.Execute(w, data{Hostname: hostname,
+			URL:      r.URL.Path,
+			Handler:  "actuator.displayEndpoints",
+			Mappings: m.mappings})
+		if err != nil {
+			log.WithError(err).Error("Unable to execute template")
+		}
+	} else {
+		type data struct {
+			Mappings []string `json:"siteMap" xml:"siteMap"`
+		}
+		siteMap := &data{
+			Mappings: m.mappings,
+		}
+		var out []byte
+		var err error
+
+		if responseType == "application/javascript" {
+			out, err = json.Marshal(siteMap)
+
+		}
+		if responseType == "application/xml" {
+			out, err = xml.Marshal(siteMap)
+		}
+		if err != nil {
+			log.WithError(err).Fatal("unable to marshal site map")
+		}
+		w.Write(out)
+	}
 }
