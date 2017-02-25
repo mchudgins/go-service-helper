@@ -155,10 +155,10 @@ func (m *ActuatorMux) displayEndpoints(w http.ResponseWriter, r *http.Request) {
 			log.WithError(err).Error("Unable to execute template")
 		}
 	} else {
-		type data struct {
-			Mappings []string `json:"siteMap" xml:"siteMap"`
+		type response struct {
+			Mappings []string `json:"siteMap" xml:"url"`
 		}
-		siteMap := &data{
+		siteMap := &response{
 			Mappings: m.mappings,
 		}
 		var out []byte
