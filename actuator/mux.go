@@ -53,6 +53,7 @@ var (
 	textTemplate = template.Must(template.New("text").Parse(text))
 )
 
+// TODO: rename to NewServeMux() && add http.Handler as param
 func NewActuatorMux(mappingURL string) *ActuatorMux {
 	mux := http.NewServeMux()
 
@@ -120,7 +121,7 @@ func (m *ActuatorMux) displayEndpoints(w http.ResponseWriter, r *http.Request) {
 
 	specs := header.ParseAccept(r.Header, "Accept")
 	for _, spec := range specs {
-		log.Infof("spec Q: %f, type: %s", spec.Q, spec.Value)
+		log.Debugf("spec Q: %f, type: %s", spec.Q, spec.Value)
 		if spec.Q == 1.0 && spec.Value == "application/xml" {
 			responseType = "application/xml"
 			break

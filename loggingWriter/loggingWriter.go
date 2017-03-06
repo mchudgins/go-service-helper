@@ -90,7 +90,7 @@ func HTTPLogrusLogger(h http.Handler) http.Handler {
 			fields["remoteIP"] = r.RemoteAddr
 			fields["method"] = r.Method
 			fields["proto"] = r.Proto
-			fields["status"] = lw.statusCode
+			fields["status"] = lw.StatusCode()
 			fields["length"] = lw.Length()
 			fields["duration"] = duration.Seconds() * 1000
 

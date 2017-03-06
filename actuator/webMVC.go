@@ -3,11 +3,15 @@ package actuator
 import "net/http"
 
 type MVCMux struct {
-	*ActuatorMux
+	handler http.Handler
+}
+
+type FrontController interface {
+
 }
 
 type Provider interface {
-	ProcessRequest(r *http.Request) (viewName string, model interface{})
+	ProcessRequest(r *http.Request) (viewName string, model interface{}, status int, err error)
 }
 
 type Viewer interface {
@@ -15,9 +19,12 @@ type Viewer interface {
 	View(model interface{}) ([]byte, error)
 }
 
-func NewMVCMux() *MVCMux {
+func NewMVCMux(h http.Handler) *MVCMux {
+	if h == nil {
+		return NewMVCMux(NewActuatorMux(""))
+	}
 	mvcMux := &MVCMux{
-		ActuatorMux: NewActuatorMux(""),
+		handler: h,
 	}
 
 	return mvcMux
@@ -27,18 +34,7 @@ func (m *MVCMux) AddProvider(pattern string, p Provider) {
 
 }
 
-func (m *MVCMux) Handle(pattern string, handler http.Handler) {
-	m.ServeMux.Handle(pattern, handler)
-}
-
-func (m *MVCMux) HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) {
-	m.ServeMux.HandleFunc(pattern, handler)
-}
-
-func (m *MVCMux) Handler(r *http.Request) (h http.Handler, pattern string) {
-	return m.ServeMux.Handler(r)
-}
-
 func (m *MVCMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	m.ServeMux.ServeHTTP(w, r)
+	w.
+	m.handler.ServeHTTP(w, r)
 }

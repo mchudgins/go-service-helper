@@ -1,9 +1,9 @@
 package hystrix
 
 import (
-	"log"
 	"time"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/afex/hystrix-go/hystrix/metric_collector"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -147,7 +147,7 @@ func (h *hystrixHelper) UpdateRunDuration(runDuration time.Duration) {
 }
 
 func (h *hystrixHelper) Reset() {
-	log.Print("reset called")
+	log.Debug("HystrixHelper reset called")
 }
 
 func (h *hystrixHelper) NewPrometheusCollector(name string) metricCollector.MetricCollector {
