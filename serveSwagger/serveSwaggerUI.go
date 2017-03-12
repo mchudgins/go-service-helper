@@ -1,8 +1,9 @@
 package serveSwagger
 
 import (
-	"log"
 	"net/http"
+
+	log "github.com/Sirupsen/logrus"
 )
 
 // TODO: this package should be refactored to use either go-bindata-assetfs OR
@@ -23,32 +24,25 @@ type SwaggerProxy struct {
 
 // NewSwaggerProxy initializes the SwaggerProxy struct
 func NewSwaggerProxy(proxyPath string) (*SwaggerProxy, error) {
-	return &SwaggerProxy{path: proxyPath,
+	return &SwaggerProxy{
+			path:    proxyPath,
 			pathLen: len(proxyPath),
-			//		h:       http.FileServer(http.Dir("/home/mchudgins/golang/src/github.com/swagger-api/swagger-ui/dist"))}, nil
-			h: http.FileServer(assetFS())},
+			//h:       http.StripPrefix("/swagger-ui/", http.FileServer(http.Dir("/home/mchudgins/golang/src/github.com/swagger-api/swagger-ui/dist")))}, nil
+
+			h: http.StripPrefix(proxyPath, Server)},
 		nil
+
 }
 
 // ServeHTTP serves up the Swagger UI
 func (s *SwaggerProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
-	log.Printf("Query: %s", r.URL.RawQuery)
-	path := r.URL.Path[s.pathLen:]
-	if len(path) == 0 && len(r.URL.RawQuery) == 0 {
-		log.Printf("hmmm. redirecting.  path: %s; query: %s; query len: %d", path, r.URL.RawQuery, len(r.URL.RawQuery))
-		http.Redirect(w, r,
-			"/swagger-ui/?url=/swagger/service.swagger.json", http.StatusMovedPermanently)
-		return
-	}
+	log.WithField("path", r.URL.Path).WithField("proxyPath", s.path).Debug("ServeHTTP")
 
-	if len(path) == 0 {
-		r.URL.Path = "/"
-	} else {
-		r.URL.Path = path
+	if r.URL.Path == s.path {
+		r.URL.Path = s.path + "/index.html"
+		log.WithField("newPath", r.URL.Path).Debug("revising path")
 	}
-
-	log.Printf("path: %s", r.URL.Path)
 
 	s.h.ServeHTTP(w, r)
 }
