@@ -6,13 +6,10 @@ import (
 	log "github.com/Sirupsen/logrus"
 )
 
-// TODO: this package should be refactored to use either go-bindata-assetfs OR
-// https://github.com/GeertJohan/go.rice
-
 // This package serves up the Swagger UI at the designated path
 // example:
-//  		swaggerProxy, _ := serveSwagger.NewSwaggerProxy("/swagger-ui/")
-//  		http.HandleFunc("/swagger-ui/", swaggerProxy.ServeHTTP)
+//  	swaggerProxy, _ := serveSwagger.NewSwaggerProxy("/swagger-ui/")
+//  	http.HandleFunc("/swagger-ui/", swaggerProxy.ServeHTTP)
 //      http.ListenAndServe(":8080", nil)
 
 // SwaggerProxy serves the swagger UI at the designated path
