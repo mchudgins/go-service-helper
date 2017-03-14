@@ -3,6 +3,7 @@ package loggingWriter
 import (
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -73,10 +74,28 @@ func HttpApacheLogger(h http.Handler) http.Handler {
 	})
 }
 
+func getRequestURIFromRaw(rawURI string) string {
+	if ! strings.Contains(rawURI, "?") {
+		return rawURI
+	}
+
+	i := strings.Index(rawURI, "?")
+
+	return rawURI[:i]
+}
+
 func HTTPLogrusLogger(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		lw := NewLoggingWriter(w)
+
+		// save some values, in case the handler changes 'em
+		host := r.Host
+		url := getRequestURIFromRaw(r.RequestURI)
+		remoteAddr := r.RemoteAddr
+		method := r.Method
+		proto := r.Proto
+
 		defer func() {
 			end := time.Now()
 			duration := end.Sub(start)
@@ -85,11 +104,11 @@ func HTTPLogrusLogger(h http.Handler) http.Handler {
 			for key := range r.Header {
 				fields[key] = r.Header.Get(key)
 			}
-			fields["Host"] = r.Host
-			fields["URL"] = r.URL.Path
-			fields["remoteIP"] = r.RemoteAddr
-			fields["method"] = r.Method
-			fields["proto"] = r.Proto
+			fields["Host"] = host
+			fields["URL"] = url
+			fields["remoteIP"] = remoteAddr
+			fields["method"] = method
+			fields["proto"] = proto
 			fields["status"] = lw.StatusCode()
 			fields["length"] = lw.Length()
 			fields["duration"] = duration.Seconds() * 1000
