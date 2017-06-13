@@ -108,6 +108,7 @@ func HTTPLogrusLogger(h http.Handler) http.Handler {
 			fields["proto"] = proto
 			fields["status"] = lw.StatusCode()
 			fields["length"] = lw.Length()
+			fields["X-Correlation-ID"] = lw.Header().Get("X-Correlation-ID")
 
 			end := time.Now()
 			duration := end.Sub(start)
