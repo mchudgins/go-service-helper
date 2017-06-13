@@ -75,7 +75,7 @@ func HttpApacheLogger(h http.Handler) http.Handler {
 }
 
 func getRequestURIFromRaw(rawURI string) string {
-	if ! strings.Contains(rawURI, "?") {
+	if !strings.Contains(rawURI, "?") {
 		return rawURI
 	}
 
@@ -97,9 +97,6 @@ func HTTPLogrusLogger(h http.Handler) http.Handler {
 		proto := r.Proto
 
 		defer func() {
-			end := time.Now()
-			duration := end.Sub(start)
-
 			fields := logrus.Fields{}
 			for key := range r.Header {
 				fields[key] = r.Header.Get(key)
@@ -111,7 +108,12 @@ func HTTPLogrusLogger(h http.Handler) http.Handler {
 			fields["proto"] = proto
 			fields["status"] = lw.StatusCode()
 			fields["length"] = lw.Length()
+
+			end := time.Now()
+			duration := end.Sub(start)
+
 			fields["duration"] = duration.Seconds() * 1000
+			fields["time"] = start.Format("20060102030405.000000")
 
 			logrus.WithFields(fields).Info("")
 		}()
