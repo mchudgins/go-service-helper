@@ -144,12 +144,14 @@ func TracerFromInternalHTTPRequest(tracer opentracing.Tracer, operationName stri
 			if _, ok := w.(*httpWriter.HTTPWriter); !ok {
 				w = httpWriter.NewHTTPWriter(w)
 			}
+			defer func() {
+				if hw, ok := w.(*httpWriter.HTTPWriter); ok {
+					serverSpan.SetTag(string(ext.HTTPStatusCode), hw.StatusCode())
+				}
+			}()
 
 			// next middleware or actual request handler
 			next.ServeHTTP(w, req)
-			if hw, ok := w.(*httpWriter.HTTPWriter); ok {
-				serverSpan.SetTag(string(ext.HTTPStatusCode), hw.StatusCode())
-			}
 		})
 	}
 }
