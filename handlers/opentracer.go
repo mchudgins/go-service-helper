@@ -5,11 +5,13 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/google/uuid"
+	"github.com/mchudgins/go-service-helper/httpWriter"
+	"github.com/mchudgins/go-service-helper/hystrix"
+	"github.com/mchudgins/go-service-helper/zipkin"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
-	zipkin "github.com/openzipkin/zipkin-go-opentracing"
+	openzipkin "github.com/openzipkin/zipkin-go-opentracing"
 	//zlog "github.com/opentracing/opentracing-go/log"
-	"github.com/mchudgins/go-service-helper/httpWriter"
 )
 
 const (
@@ -25,21 +27,35 @@ var (
 type traceLogger struct{}
 
 func (logger traceLogger) Log(keyval ...interface{}) error {
-	log.Warn("Log was called!")
+	fields := make(log.Fields)
+	len := len(keyval)
+
+	for i := 0; i < len; i = +2 {
+		if key, ok := keyval[i].(string); ok {
+			fields[key] = keyval[i+1]
+		} else {
+			log.WithField("field", keyval[i]).
+				Error("key name is not of type 'string'")
+		}
+	}
+
+	log.WithFields(fields).Info("opentracer.go")
+
 	return nil
 }
 
 func NewTracer(serviceName string) opentracing.Tracer {
 	collector, err := zipkin.NewHTTPCollector(zipkinHTTPEndpoint,
 		zipkin.HTTPLogger(traceLogger{}),
+		zipkin.HTTPClient(hystrix.NewClient("zipkin")),
 		zipkin.HTTPBatchSize(1))
 	if err != nil {
 		log.WithError(err).Fatal("zipkin.NewHTTPCollector failed")
 	}
 
-	tracer, err := zipkin.NewTracer(
-		zipkin.NewRecorder(collector, debugMode, serviceHostPort, serviceName),
-		zipkin.WithLogger(traceLogger{}),
+	tracer, err := openzipkin.NewTracer(
+		openzipkin.NewRecorder(collector, debugMode, serviceHostPort, serviceName),
+		openzipkin.WithLogger(traceLogger{}),
 		//		zipkin.DebugMode(true),
 		//		zipkin.ClientServerSameSpan(true),
 	)

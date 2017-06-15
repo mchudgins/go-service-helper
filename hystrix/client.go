@@ -1,4 +1,4 @@
-package httpWriter
+package hystrix
 
 import (
 	"io"
@@ -11,13 +11,13 @@ import (
 	"github.com/afex/hystrix-go/hystrix"
 )
 
-type Client struct {
+type HTTPClient struct {
 	http.Client
 	HystrixCommandName string
 }
 
-func NewClient(commandName string) *Client {
-	return &Client{
+func NewClient(commandName string) *HTTPClient {
+	return &HTTPClient{
 		HystrixCommandName: commandName,
 	}
 }
@@ -54,32 +54,32 @@ func circuitBreaker(u, commandName string, fn func() (*http.Response, error)) (*
 	}
 }
 
-func (c *Client) Do(r *http.Request) (*http.Response, error) {
+func (c *HTTPClient) Do(r *http.Request) (*http.Response, error) {
 	return circuitBreaker(r.URL.Path, c.HystrixCommandName, func() (*http.Response, error) {
 		return c.Client.Do(r)
 	})
 }
 
-func (c *Client) Get(url string) (*http.Response, error) {
+func (c *HTTPClient) Get(url string) (*http.Response, error) {
 	return circuitBreaker(url, c.HystrixCommandName, func() (*http.Response, error) {
 		return c.Client.Get(url)
 	})
 }
 
-func (c *Client) Head(url string) (*http.Response, error) {
+func (c *HTTPClient) Head(url string) (*http.Response, error) {
 	return circuitBreaker(url, c.HystrixCommandName, func() (*http.Response, error) {
 		return c.Client.Head(url)
 	})
 
 }
 
-func (c *Client) Post(url string, contentType string, body io.Reader) (*http.Response, error) {
+func (c *HTTPClient) Post(url string, contentType string, body io.Reader) (*http.Response, error) {
 	return circuitBreaker(url, c.HystrixCommandName, func() (*http.Response, error) {
 		return c.Client.Post(url, contentType, body)
 	})
 }
 
-func (c *Client) PostForm(url string, data url.Values) (*http.Response, error) {
+func (c *HTTPClient) PostForm(url string, data url.Values) (*http.Response, error) {
 	return circuitBreaker(url, c.HystrixCommandName, func() (*http.Response, error) {
 		return c.Client.PostForm(url, data)
 	})
