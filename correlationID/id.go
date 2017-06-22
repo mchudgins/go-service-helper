@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/google/uuid"
 )
 
@@ -24,9 +23,7 @@ func FromRequest(req *http.Request) (*http.Request, string) {
 		corrID = uuid.New().String()
 	}
 	ctx := context.WithValue(req.Context(), correlationID, corrID)
-	log.WithField("x-correlation-id", FromContext(ctx)).Info("FromRequest")
 	req = req.WithContext(ctx)
-	log.WithField("x-correlation-id", FromContext(req.Context())).Info("FromRequest")
 
 	return req, corrID
 }
