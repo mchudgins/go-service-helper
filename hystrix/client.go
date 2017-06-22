@@ -9,6 +9,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/afex/hystrix-go/hystrix"
+	"github.com/mchudgins/go-service-helper/correlationID"
 )
 
 type HTTPClient struct {
@@ -56,6 +57,11 @@ func circuitBreaker(u, commandName string, fn func() (*http.Response, error)) (*
 
 func (c *HTTPClient) Do(r *http.Request) (*http.Response, error) {
 	return circuitBreaker(r.URL.Path, c.HystrixCommandName, func() (*http.Response, error) {
+
+		// send any correlation ID on to the servers we contact
+		corrID := correlationID.FromContext(r.Context())
+		r.Header.Set(correlationID.CORRID, corrID)
+
 		return c.Client.Do(r)
 	})
 }

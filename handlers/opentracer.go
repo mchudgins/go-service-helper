@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/google/uuid"
 	"github.com/mchudgins/go-service-helper/httpWriter"
 	"github.com/mchudgins/go-service-helper/hystrix"
 	"github.com/mchudgins/go-service-helper/zipkin"
@@ -12,10 +11,7 @@ import (
 	"github.com/opentracing/opentracing-go/ext"
 	openzipkin "github.com/openzipkin/zipkin-go-opentracing"
 	//zlog "github.com/opentracing/opentracing-go/log"
-)
-
-const (
-	CORRID string = "X-Correlation-ID"
+	"github.com/mchudgins/go-service-helper/correlationID"
 )
 
 var (
@@ -48,7 +44,7 @@ func NewTracer(serviceName string) opentracing.Tracer {
 	collector, err := zipkin.NewHTTPCollector(zipkinHTTPEndpoint,
 		zipkin.HTTPLogger(traceLogger{}),
 		zipkin.HTTPClient(hystrix.NewClient("zipkin")),
-		zipkin.HTTPBatchSize(1))
+		zipkin.HTTPBatchSize(100))
 	if err != nil {
 		log.WithError(err).Fatal("zipkin.NewHTTPCollector failed")
 	}
@@ -86,15 +82,10 @@ func TracerFromHTTPRequest(tracer opentracing.Tracer, operationName string,
 			defer span.Finish()
 
 			// tag this request with a correlation ID, so we can troubleshoot it later, if necessary
-			corrID := req.Header.Get(CORRID)
-			if len(corrID) == 0 {
-				corrID = uuid.New().String()
-			}
-
-			w.Header().Add(CORRID, corrID)
-			span.SetTag(CORRID, corrID)
+			req, corrID := correlationID.FromRequest(req)
+			w.Header().Set(correlationID.CORRID, corrID)
+			span.SetTag(correlationID.CORRID, corrID)
 			ext.HTTPUrl.Set(span, req.URL.Path)
-			//			span.SetTag(ext.HTTPUrl,req.URL.Path)
 
 			// store span in context
 			ctx = opentracing.ContextWithSpan(req.Context(), span)
@@ -123,6 +114,10 @@ func TracerFromInternalHTTPRequest(tracer opentracing.Tracer, operationName stri
 ) HandlerFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+
+			// tag this request with a correlation ID, so we can troubleshoot it later, if necessary
+			req, corrID := correlationID.FromRequest(req)
+			w.Header().Set(correlationID.CORRID, corrID)
 
 			var serverSpan opentracing.Span
 			appSpecificOperationName := operationName

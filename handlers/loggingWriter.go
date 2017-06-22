@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/mchudgins/go-service-helper/correlationID"
 	"github.com/mchudgins/go-service-helper/httpWriter"
 )
 
@@ -21,7 +22,7 @@ func HttpApacheLogger(h http.Handler) http.Handler {
 			log.Printf("host: %s; uri: %s; CorrelationID: %s; remoteAddress: %s; method:  %s; proto: %s; status: %d, contentLength: %d, duration: %.3f; ua: %s",
 				r.Host,
 				r.RequestURI,
-				lw.Header().Get("X-Correlation-ID"),
+				lw.Header().Get(correlationID.CORRID),
 				r.RemoteAddr,
 				r.Method,
 				r.Proto,
@@ -70,7 +71,7 @@ func HTTPLogrusLogger(h http.Handler) http.Handler {
 			fields["proto"] = proto
 			fields["status"] = lw.StatusCode()
 			fields["length"] = lw.Length()
-			fields["X-Correlation-ID"] = lw.Header().Get("X-Correlation-ID")
+			fields[correlationID.CORRID] = lw.Header().Get(correlationID.CORRID)
 
 			end := time.Now()
 			duration := end.Sub(start)
