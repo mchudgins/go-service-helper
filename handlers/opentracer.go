@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/mchudgins/go-service-helper/correlationID"
 	"github.com/mchudgins/go-service-helper/httpWriter"
 	"github.com/mchudgins/go-service-helper/hystrix"
 	"github.com/mchudgins/go-service-helper/zipkin"
@@ -11,7 +12,6 @@ import (
 	"github.com/opentracing/opentracing-go/ext"
 	openzipkin "github.com/openzipkin/zipkin-go-opentracing"
 	//zlog "github.com/opentracing/opentracing-go/log"
-	"github.com/mchudgins/go-service-helper/correlationID"
 )
 
 var (
