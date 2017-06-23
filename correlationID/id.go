@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	CORRID string = "X-Correlation-Id"
+	CORRID string = "X-Request-ID"
 )
 
 var (
