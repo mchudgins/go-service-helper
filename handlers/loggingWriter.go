@@ -9,6 +9,7 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/mchudgins/go-service-helper/correlationID"
 	"github.com/mchudgins/go-service-helper/httpWriter"
+	"github.com/mchudgins/go-service-helper/user"
 )
 
 // httpLogger provides per request log statements (ala Apache httpd)
@@ -71,13 +72,24 @@ func HTTPLogrusLogger(h http.Handler) http.Handler {
 			fields["proto"] = proto
 			fields["status"] = lw.StatusCode()
 			fields["length"] = lw.Length()
-			fields[correlationID.CORRID] = lw.Header().Get(correlationID.CORRID)
+			if len(r.Header.Get(correlationID.CORRID)) == 0 {
+				fields[correlationID.CORRID] = lw.Header().Get(correlationID.CORRID)
+			}
 
 			end := time.Now()
 			duration := end.Sub(start)
 
 			fields["duration"] = duration.Seconds() * 1000
 			fields["time"] = start.Format("20060102030405.000000")
+
+			// who dat?
+			_, uid := user.FromRequest(r)
+			if len(uid) == 0 {
+				uid = user.FromContext(r.Context())
+				if len(uid) > 0 {
+					fields["userID"] = uid
+				}
+			}
 
 			logrus.WithFields(fields).Info("")
 		}()
