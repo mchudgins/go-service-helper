@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"strings"
@@ -11,6 +12,15 @@ import (
 	"github.com/mchudgins/go-service-helper/httpWriter"
 	"github.com/mchudgins/go-service-helper/user"
 )
+
+type key int
+
+var loggerKey key = 0
+
+func FromContext(ctx context.Context) (*logrus.Entry, bool) {
+	logger, ok := ctx.Value(loggerKey).(*logrus.Entry)
+	return logger, ok
+}
 
 // httpLogger provides per request log statements (ala Apache httpd)
 func HttpApacheLogger(h http.Handler) http.Handler {
@@ -50,6 +60,14 @@ func getRequestURIFromRaw(rawURI string) string {
 
 func HTTPLogrusLogger(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		l := logrus.New().WithField("fubar", "gorf")
+		r = r.WithContext(context.WithValue(r.Context(), loggerKey, l))
+		logger, ok := FromContext(r.Context())
+		if ok {
+			logger.Info("setting logger")
+		}
+
 		start := time.Now()
 		lw := httpWriter.NewHTTPWriter(w)
 
