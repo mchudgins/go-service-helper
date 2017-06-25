@@ -61,12 +61,9 @@ func getRequestURIFromRaw(rawURI string) string {
 func HTTPLogrusLogger(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
-		l := logrus.New().WithField("fubar", "gorf")
-		r = r.WithContext(context.WithValue(r.Context(), loggerKey, l))
-		logger, ok := FromContext(r.Context())
-		if ok {
-			logger.Info("setting logger")
-		}
+		ctx := r.Context()
+		l := logrus.New().WithField(correlationID.CORRID, correlationID.FromContext(ctx))
+		r = r.WithContext(context.WithValue(ctx, loggerKey, l))
 
 		start := time.Now()
 		lw := httpWriter.NewHTTPWriter(w)
