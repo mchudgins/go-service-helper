@@ -74,6 +74,7 @@ type HandlerFunc func(next http.Handler) http.Handler
 // headers, the Span will be a trace root. The Span is incorporated in the
 // HTTP Context object and can be retrieved with
 // opentracing.SpanFromContext(ctx).
+/*
 func TracerFromHTTPRequest(tracer opentracing.Tracer, operationName string,
 ) HandlerFunc {
 	return func(next http.Handler) http.Handler {
@@ -109,8 +110,9 @@ func TracerFromHTTPRequest(tracer opentracing.Tracer, operationName string,
 		})
 	}
 }
+*/
 
-func TracerFromInternalHTTPRequest(tracer opentracing.Tracer, operationName string,
+func TracerFromHTTPRequest(tracer opentracing.Tracer, operationName string,
 ) HandlerFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -125,7 +127,8 @@ func TracerFromInternalHTTPRequest(tracer opentracing.Tracer, operationName stri
 				opentracing.HTTPHeaders,
 				opentracing.HTTPHeadersCarrier(req.Header))
 			if err != nil {
-				log.WithError(err).Error("unable to extract wire context")
+				// no need to handle, we'll just create a parent span later
+				//log.WithError(err).Error("unable to extract wire context")
 			}
 
 			// Create the span referring to the RPC client if available.
