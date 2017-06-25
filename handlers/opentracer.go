@@ -140,6 +140,7 @@ func TracerFromHTTPRequest(tracer opentracing.Tracer, operationName string,
 			defer serverSpan.Finish()
 
 			ext.HTTPUrl.Set(serverSpan, req.URL.Path)
+			serverSpan.SetTag(correlationID.CORRID, corrID)
 
 			/*
 				serverSpan.LogFields(
