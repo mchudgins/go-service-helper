@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	CORRID string = "X-Request-ID"
+	CORRID string = "X-Request-Id"
 )
 
 var (
@@ -17,15 +17,19 @@ var (
 
 type key struct{}
 
-func FromRequest(req *http.Request) (*http.Request, string) {
+func FromRequest(req *http.Request) (*http.Request, string, bool) {
+	fExisted := false
+
 	corrID := req.Header.Get(CORRID)
 	if len(corrID) == 0 {
 		corrID = uuid.New().String()
+	} else {
+		fExisted = true
 	}
 	ctx := context.WithValue(req.Context(), correlationID, corrID)
 	req = req.WithContext(ctx)
 
-	return req, corrID
+	return req, corrID, fExisted
 }
 
 func FromContext(ctx context.Context) string {

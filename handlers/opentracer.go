@@ -118,8 +118,12 @@ func TracerFromHTTPRequest(tracer opentracing.Tracer, operationName string,
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 
 			// tag this request with a correlation ID, so we can troubleshoot it later, if necessary
-			req, corrID := correlationID.FromRequest(req)
-			w.Header().Set(correlationID.CORRID, corrID)
+			req, corrID, fExisted := correlationID.FromRequest(req)
+
+			// if we're at the edge of the system, send the correlation ID back in the response
+			if !fExisted {
+				w.Header().Set(correlationID.CORRID, corrID)
+			}
 
 			var serverSpan opentracing.Span
 			appSpecificOperationName := operationName
