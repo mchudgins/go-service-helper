@@ -2,16 +2,31 @@ package httpWriter
 
 import (
 	"net/http"
+
+	log "github.com/Sirupsen/logrus"
 )
 
 type HTTPWriter struct {
 	w             http.ResponseWriter
 	statusCode    int
 	contentLength int
+	logger        *log.Entry
 }
 
-func NewHTTPWriter(w http.ResponseWriter) *HTTPWriter {
-	return &HTTPWriter{w: w}
+type Option func(w *HTTPWriter)
+
+func Logger(logger *log.Entry) Option {
+	return func(w *HTTPWriter) { w.logger = logger }
+}
+
+func NewHTTPWriter(w http.ResponseWriter, options ...Option) *HTTPWriter {
+	writer := &HTTPWriter{w: w}
+
+	for _, option := range options {
+		option(writer)
+	}
+
+	return writer
 }
 
 func (l *HTTPWriter) Header() http.Header {
@@ -19,6 +34,14 @@ func (l *HTTPWriter) Header() http.Header {
 }
 
 func (l *HTTPWriter) Write(data []byte) (int, error) {
+
+	if l.logger != nil {
+		l.logger.
+			WithField("data", string(data)).
+			WithField("len", len(data)).
+			Info("HTTPWriter.Write")
+	}
+
 	l.contentLength += len(data)
 	return l.w.Write(data)
 }

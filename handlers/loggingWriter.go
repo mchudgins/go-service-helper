@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"net/textproto"
 	"strings"
 	"time"
 
@@ -61,11 +62,12 @@ func getRequestURIFromRaw(rawURI string) string {
 func HTTPLogrusLogger(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
+		start := time.Now()
+
 		ctx := r.Context()
 		l := logrus.New().WithField(correlationID.CORRID, correlationID.FromContext(ctx))
 		r = r.WithContext(context.WithValue(ctx, loggerKey, l))
 
-		start := time.Now()
 		lw := httpWriter.NewHTTPWriter(w)
 
 		// save some values, in case the handler changes 'em
@@ -75,19 +77,23 @@ func HTTPLogrusLogger(h http.Handler) http.Handler {
 		method := r.Method
 		proto := r.Proto
 
+		fields := logrus.Fields{}
+		fields["Host"] = host
+		for key := range r.Header {
+			fields[textproto.CanonicalMIMEHeaderKey(key)] = r.Header.Get(key)
+		}
+		fields["URL"] = url
+		fields["remoteIP"] = remoteAddr
+		fields["method"] = method
+		fields["proto"] = proto
+
 		defer func() {
-			fields := logrus.Fields{}
-			for key := range r.Header {
-				fields[key] = r.Header.Get(key)
-			}
-			fields["Host"] = host
-			fields["URL"] = url
-			fields["remoteIP"] = remoteAddr
-			fields["method"] = method
-			fields["proto"] = proto
 			fields["status"] = lw.StatusCode()
 			fields["length"] = lw.Length()
-			if len(r.Header.Get(correlationID.CORRID)) == 0 {
+
+			// maybe the X-Request-ID was set on the way back?
+			id, ok := fields[correlationID.CORRID].(string)
+			if !ok || len(id) == 0 {
 				fields[correlationID.CORRID] = lw.Header().Get(correlationID.CORRID)
 			}
 
