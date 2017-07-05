@@ -97,6 +97,16 @@ func HTTPLogrusLogger(h http.Handler) http.Handler {
 				fields[correlationID.CORRID] = lw.Header().Get(correlationID.CORRID)
 			}
 
+			// get some info about the response
+			rct := lw.Header().Get("Content-Type")
+			if len(rct) > 0 {
+				fields["response-Content-Type"] = rct
+			}
+			cc := lw.Header().Get("Cache-Control")
+			if len(cc) > 0 {
+				fields["response-Cache-Control"] = cc
+			}
+
 			end := time.Now()
 			duration := end.Sub(start)
 
