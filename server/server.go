@@ -108,7 +108,7 @@ const (
 	rpcServer
 )
 
-type errorSource struct {
+type eventSource struct {
 	source sourcetype
 	err    error
 }
@@ -135,6 +135,7 @@ func Run(opts ...Option) {
 		MetricsListenPort: 8080,
 		RPCListenPort:     50050,
 	}
+
 	for _, o := range opts {
 		o(cfg)
 	}
@@ -142,13 +143,13 @@ func Run(opts ...Option) {
 	// make a channel to listen on events,
 	// then launch the servers.
 
-	errc := make(chan errorSource)
+	errc := make(chan eventSource)
 
 	// interrupt handler
 	go func() {
 		c := make(chan os.Signal, 1)
 		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
-		errc <- errorSource{
+		errc <- eventSource{
 			source: interrupt,
 			err:    fmt.Errorf("%s", <-c),
 		}
@@ -160,7 +161,7 @@ func Run(opts ...Option) {
 			rpcListenPort := ":" + strconv.Itoa(cfg.RPCListenPort)
 			lis, err := net.Listen("tcp", rpcListenPort)
 			if err != nil {
-				errc <- errorSource{
+				errc <- eventSource{
 					err:    err,
 					source: rpcServer,
 				}
@@ -193,7 +194,7 @@ func Run(opts ...Option) {
 			} else {
 				log.Infof("gRPC service listening on %s", rpcListenPort)
 			}
-			errc <- errorSource{
+			errc <- eventSource{
 				err:    cfg.rpcServer.Serve(lis),
 				source: rpcServer,
 			}
@@ -237,7 +238,7 @@ func Run(opts ...Option) {
 			ReadHeaderTimeout: time.Duration(2) * time.Second,
 		}
 
-		errc <- errorSource{
+		errc <- eventSource{
 			err:    cfg.httpServer.ListenAndServeTLS(cfg.CertFilename, cfg.KeyFilename),
 			source: httpServer,
 		}
@@ -252,7 +253,7 @@ func Run(opts ...Option) {
 			Addr:    listenPort,
 			Handler: hystrixStreamHandler,
 		}
-		errc <- errorSource{
+		errc <- eventSource{
 			err:    cfg.metricsServer.ListenAndServe(),
 			source: metricsServer,
 		}
@@ -271,22 +272,52 @@ func Run(opts ...Option) {
 	ctx, cancel := context.WithTimeout(context.Background(), waitDuration)
 	defer cancel()
 
+	waitEvents := 0
+	evtc := make(chan eventSource)
+
 	if rc.source != httpServer && cfg.httpServer != nil {
-		err = cfg.httpServer.Shutdown(ctx)
+		waitEvents++
+		go func() {
+			evtc <- eventSource{
+				err:    cfg.httpServer.Shutdown(ctx),
+				source: httpServer,
+			}
+		}()
 	}
 	if rc.source != rpcServer && cfg.rpcServer != nil {
-		cfg.rpcServer.GracefulStop()
+		waitEvents++
+		go func() {
+			cfg.rpcServer.GracefulStop()
+			evtc <- eventSource{source: rpcServer}
+		}()
 	}
 	if rc.source != metricsServer && cfg.metricsServer != nil {
-		cfg.metricsServer.Shutdown(ctx)
+		waitEvents++
+		go func() {
+			evtc <- eventSource{
+				err:    cfg.metricsServer.Shutdown(ctx),
+				source: metricsServer,
+			}
+		}()
 	}
 
 	// wait for shutdown to complete or time to expire
-	select {
-	case <-time.After(time.Duration(4) * time.Second):
-		cfg.logger.Info("server shutdown complete")
+	for {
+		select {
+		case <-time.After(time.Duration(4) * time.Second):
+			cfg.logger.Info("server shutdown complete")
+			os.Exit(1)
 
-	case <-ctx.Done():
-		cfg.logger.Warn("shutdown time expired -- performing hard shutdown", zap.Error(ctx.Err()))
+		case <-ctx.Done():
+			cfg.logger.Warn("shutdown time expired -- performing hard shutdown", zap.Error(ctx.Err()))
+			os.Exit(2)
+
+		case evt := <-evtc:
+			waitEvents--
+			cfg.logger.Info("waitEvent recv'ed", zap.Error(evt.err), zap.Int("eventSource", int(evt.source)))
+			if waitEvents == 0 {
+				os.Exit(0)
+			}
+		}
 	}
 }
