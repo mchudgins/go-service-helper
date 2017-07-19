@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"expvar"
 	"fmt"
 	"net"
@@ -11,8 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"context"
-
 	afex "github.com/afex/hystrix-go/hystrix"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
@@ -22,8 +21,8 @@ import (
 	"github.com/mchudgins/playground/pkg/healthz"
 	"github.com/mwitkow/go-grpc-middleware"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/log"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	xcontext "golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -36,6 +35,7 @@ type Config struct {
 	HTTPListenPort    int
 	RPCListenPort     int
 	MetricsListenPort int
+	Handler           http.Handler
 	RPCRegister       RPCRegistration
 	logger            *zap.Logger
 	rpcServer         *grpc.Server
@@ -49,15 +49,15 @@ type RPCRegistration func(*grpc.Server) error
 
 func WithRPCServer(fn RPCRegistration) Option {
 	return func(cfg *Config) error {
-		/*
-			echoServer, err := NewServer(p.logger)
-			if err != nil {
-				cfg.logger.Panic("while creating new EchoServer", zap.Error(err))
-			}
-			rpc.RegisterEchoServiceServer(s, echoServer)
-		*/
 		cfg.RPCRegister = fn
 
+		return nil
+	}
+}
+
+func WithHTTPServer(h http.Handler) Option {
+	return func(cfg *Config) error {
+		cfg.Handler = h
 		return nil
 	}
 }
@@ -99,20 +99,6 @@ func WithLogger(l *zap.Logger) Option {
 	}
 }
 
-type sourcetype int
-
-const (
-	interrupt sourcetype = iota
-	httpServer
-	metricsServer
-	rpcServer
-)
-
-type eventSource struct {
-	source sourcetype
-	err    error
-}
-
 func grpcEndpointLog(logger *zap.Logger, s string) grpc.UnaryServerInterceptor {
 	return func(ctx xcontext.Context,
 		req interface{},
@@ -128,7 +114,9 @@ func grpcEndpointLog(logger *zap.Logger, s string) grpc.UnaryServerInterceptor {
 	}
 }
 
-func Run(opts ...Option) {
+func Run(ctx context.Context, opts ...Option) {
+
+	// default config
 	cfg := &Config{
 		Insecure:          true,
 		HTTPListenPort:    8443,
@@ -136,6 +124,7 @@ func Run(opts ...Option) {
 		RPCListenPort:     50050,
 	}
 
+	// process the Run() options
 	for _, o := range opts {
 		o(cfg)
 	}
@@ -144,6 +133,7 @@ func Run(opts ...Option) {
 	// then launch the servers.
 
 	errc := make(chan eventSource)
+	defer close(errc)
 
 	// interrupt handler
 	go func() {
@@ -189,11 +179,6 @@ func Run(opts ...Option) {
 
 			cfg.RPCRegister(cfg.rpcServer)
 
-			if cfg.Insecure {
-				log.Warnf("gRPC service listening insecurely on %s", rpcListenPort)
-			} else {
-				log.Infof("gRPC service listening on %s", rpcListenPort)
-			}
 			errc <- eventSource{
 				err:    cfg.rpcServer.Serve(lis),
 				source: rpcServer,
@@ -201,48 +186,56 @@ func Run(opts ...Option) {
 		}()
 	}
 
-	// health & metrics via https
-	go func() {
-		rootMux := mux.NewRouter() //actuator.NewActuatorMux("")
+	// http/https server
+	if cfg.Handler != nil {
+		go func() {
+			rootMux := mux.NewRouter() //actuator.NewActuatorMux("")
 
-		hc, err := healthz.NewConfig()
-		healthzHandler, err := healthz.Handler(hc)
-		if err != nil {
-			cfg.logger.Panic("Constructing healthz.Handler", zap.Error(err))
-		}
+			hc, err := healthz.NewConfig()
+			healthzHandler, err := healthz.Handler(hc)
+			if err != nil {
+				cfg.logger.Panic("Constructing healthz.Handler", zap.Error(err))
+			}
 
-		// set up handlers for THIS instance
-		// (these are not expected to be proxied)
-		rootMux.Handle("/debug/vars", expvar.Handler())
-		rootMux.Handle("/healthz", healthzHandler)
-		rootMux.Handle("/metrics", prometheus.Handler())
+			// set up handlers for THIS instance
+			// (these are not expected to be proxied)
+			rootMux.Handle("/debug/vars", expvar.Handler())
+			rootMux.Handle("/healthz", healthzHandler)
+			rootMux.Handle("/metrics", prometheus.Handler())
 
-		canonical := handlers.CanonicalHost("http://fubar.local.dstcorp.io:7070", http.StatusPermanentRedirect)
-		var tracer func(http.Handler) http.Handler
-		tracer = gsh.TracerFromHTTPRequest(gsh.NewTracer("commandName"), "proxy")
+			canonical := handlers.CanonicalHost("http://fubar.local.dstcorp.io:7070", http.StatusPermanentRedirect)
+			var tracer func(http.Handler) http.Handler
+			tracer = gsh.TracerFromHTTPRequest(gsh.NewTracer("commandName"), "proxy")
 
-		//rootMux.PathPrefix("/").Handler(p)
+			//rootMux.PathPrefix("/").Handler(p)
 
-		chain := alice.New(tracer,
-			gsh.HTTPMetricsCollector,
-			gsh.HTTPLogrusLogger,
-			canonical,
-			handlers.CompressHandler)
+			chain := alice.New(tracer,
+				gsh.HTTPMetricsCollector,
+				gsh.HTTPLogrusLogger,
+				canonical,
+				handlers.CompressHandler)
 
-		//errc <- http.ListenAndServe(p.address, chain.Then(rootMux))
-		httpListenAddress := ":" + strconv.Itoa(cfg.HTTPListenPort)
-		cfg.httpServer = &http.Server{
-			Addr:              httpListenAddress,
-			Handler:           chain.Then(rootMux),
-			ReadTimeout:       time.Duration(5) * time.Second,
-			ReadHeaderTimeout: time.Duration(2) * time.Second,
-		}
+			//errc <- http.ListenAndServe(p.address, chain.Then(rootMux))
+			httpListenAddress := ":" + strconv.Itoa(cfg.HTTPListenPort)
+			cfg.httpServer = &http.Server{
+				Addr:              httpListenAddress,
+				Handler:           chain.Then(rootMux),
+				ReadTimeout:       time.Duration(5) * time.Second,
+				ReadHeaderTimeout: time.Duration(2) * time.Second,
+			}
 
-		errc <- eventSource{
-			err:    cfg.httpServer.ListenAndServeTLS(cfg.CertFilename, cfg.KeyFilename),
-			source: httpServer,
-		}
-	}()
+			if cfg.Insecure {
+				err = cfg.httpServer.ListenAndServe()
+			} else {
+				err = cfg.httpServer.ListenAndServeTLS(cfg.CertFilename, cfg.KeyFilename)
+			}
+
+			errc <- eventSource{
+				err:    err,
+				source: httpServer,
+			}
+		}()
+	}
 
 	// start the hystrix stream provider
 	go func() {
@@ -253,71 +246,40 @@ func Run(opts ...Option) {
 			Addr:    listenPort,
 			Handler: hystrixStreamHandler,
 		}
+
 		errc <- eventSource{
 			err:    cfg.metricsServer.ListenAndServe(),
 			source: metricsServer,
 		}
 	}()
 
+	cfg.logLaunch()
+
 	// wait for somthin'
-	cfg.logger.Info("Echo Server",
-		zap.Int("http port", cfg.HTTPListenPort),
-		zap.Int("metrics port", cfg.MetricsListenPort),
-		zap.Int("RPC port", cfg.RPCListenPort))
 	rc := <-errc
 
-	// somethin happened, now shut everything down gracefully
-	cfg.logger.Info("exit", zap.Error(rc.err), zap.Int("source", int(rc.source)))
-	waitDuration := time.Duration(5) * time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), waitDuration)
-	defer cancel()
+	// somethin happened, now shut everything down gracefully, if possible
+	cfg.performGracefulShutdown(ctx, rc)
+}
 
-	waitEvents := 0
-	evtc := make(chan eventSource)
+func (cfg *Config) logLaunch() {
+	serverList := make([]zapcore.Field, 0, 5)
 
-	if rc.source != httpServer && cfg.httpServer != nil {
-		waitEvents++
-		go func() {
-			evtc <- eventSource{
-				err:    cfg.httpServer.Shutdown(ctx),
-				source: httpServer,
-			}
-		}()
+	if cfg.RPCRegister != nil {
+		serverList = append(serverList, zap.Int("gRPC port", cfg.RPCListenPort))
 	}
-	if rc.source != rpcServer && cfg.rpcServer != nil {
-		waitEvents++
-		go func() {
-			cfg.rpcServer.GracefulStop()
-			evtc <- eventSource{source: rpcServer}
-		}()
-	}
-	if rc.source != metricsServer && cfg.metricsServer != nil {
-		waitEvents++
-		go func() {
-			evtc <- eventSource{
-				err:    cfg.metricsServer.Shutdown(ctx),
-				source: metricsServer,
-			}
-		}()
-	}
-
-	// wait for shutdown to complete or time to expire
-	for {
-		select {
-		case <-time.After(time.Duration(4) * time.Second):
-			cfg.logger.Info("server shutdown complete")
-			os.Exit(1)
-
-		case <-ctx.Done():
-			cfg.logger.Warn("shutdown time expired -- performing hard shutdown", zap.Error(ctx.Err()))
-			os.Exit(2)
-
-		case evt := <-evtc:
-			waitEvents--
-			cfg.logger.Info("waitEvent recv'ed", zap.Error(evt.err), zap.Int("eventSource", int(evt.source)))
-			if waitEvents == 0 {
-				os.Exit(0)
-			}
+	if cfg.Handler != nil {
+		var key = "HTTPS port"
+		if cfg.Insecure {
+			key = "HTTP port"
 		}
+		serverList = append(serverList, zap.Int(key, cfg.HTTPListenPort))
+	}
+	serverList = append(serverList, zap.Int("metrics port", cfg.MetricsListenPort))
+
+	if cfg.Insecure {
+		cfg.logger.Warn("Echo Server listening insecurely on one or more ports", serverList...)
+	} else {
+		cfg.logger.Info("Echo Server", serverList...)
 	}
 }
