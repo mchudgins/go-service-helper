@@ -30,12 +30,14 @@ import (
 
 type Config struct {
 	Insecure          bool
+	Compress          bool // if true, add compression handling to messages
 	CertFilename      string
 	KeyFilename       string
 	HTTPListenPort    int
 	RPCListenPort     int
 	MetricsListenPort int
 	Handler           http.Handler
+	Hostname          string // if present, enforce canonical hostnames
 	RPCRegister       RPCRegistration
 	logger            *zap.Logger
 	rpcServer         *grpc.Server
@@ -58,6 +60,14 @@ func WithRPCServer(fn RPCRegistration) Option {
 func WithHTTPServer(h http.Handler) Option {
 	return func(cfg *Config) error {
 		cfg.Handler = h
+		return nil
+	}
+}
+
+func WithCanonicalHost(hostname string) Option {
+	return func(cfg *Config) error {
+		cfg.Hostname = hostname
+
 		return nil
 	}
 }
@@ -189,7 +199,7 @@ func Run(ctx context.Context, opts ...Option) {
 	// http/https server
 	if cfg.Handler != nil {
 		go func() {
-			rootMux := mux.NewRouter() //actuator.NewActuatorMux("")
+			rootMux := mux.NewRouter()
 
 			hc, err := healthz.NewConfig()
 			healthzHandler, err := healthz.Handler(hc)
@@ -197,25 +207,31 @@ func Run(ctx context.Context, opts ...Option) {
 				cfg.logger.Panic("Constructing healthz.Handler", zap.Error(err))
 			}
 
+			rootMux.PathPrefix("/").Handler(cfg.Handler)
+
+			// TODO: move these three handlers to the metrics listener
 			// set up handlers for THIS instance
 			// (these are not expected to be proxied)
 			rootMux.Handle("/debug/vars", expvar.Handler())
 			rootMux.Handle("/healthz", healthzHandler)
 			rootMux.Handle("/metrics", prometheus.Handler())
 
-			canonical := handlers.CanonicalHost("http://fubar.local.dstcorp.io:7070", http.StatusPermanentRedirect)
 			var tracer func(http.Handler) http.Handler
 			tracer = gsh.TracerFromHTTPRequest(gsh.NewTracer("commandName"), "proxy")
 
-			//rootMux.PathPrefix("/").Handler(p)
-
 			chain := alice.New(tracer,
 				gsh.HTTPMetricsCollector,
-				gsh.HTTPLogrusLogger,
-				canonical,
-				handlers.CompressHandler)
+				gsh.HTTPLogrusLogger)
 
-			//errc <- http.ListenAndServe(p.address, chain.Then(rootMux))
+			if len(cfg.Hostname) > 0 {
+				canonical := handlers.CanonicalHost(cfg.Hostname, http.StatusPermanentRedirect)
+				chain = chain.Append(canonical)
+			}
+
+			if cfg.Compress {
+				chain = chain.Append(handlers.CompressHandler)
+			}
+
 			httpListenAddress := ":" + strconv.Itoa(cfg.HTTPListenPort)
 			cfg.httpServer = &http.Server{
 				Addr:              httpListenAddress,
