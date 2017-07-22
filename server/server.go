@@ -207,14 +207,14 @@ func Run(ctx context.Context, opts ...Option) {
 				cfg.logger.Panic("Constructing healthz.Handler", zap.Error(err))
 			}
 
-			rootMux.PathPrefix("/").Handler(cfg.Handler)
-
 			// TODO: move these three handlers to the metrics listener
 			// set up handlers for THIS instance
 			// (these are not expected to be proxied)
 			rootMux.Handle("/debug/vars", expvar.Handler())
 			rootMux.Handle("/healthz", healthzHandler)
 			rootMux.Handle("/metrics", prometheus.Handler())
+
+			rootMux.PathPrefix("/").Handler(cfg.Handler)
 
 			var tracer func(http.Handler) http.Handler
 			tracer = gsh.TracerFromHTTPRequest(gsh.NewTracer("commandName"), "proxy")
