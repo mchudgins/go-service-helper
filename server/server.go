@@ -238,6 +238,7 @@ func Run(ctx context.Context, opts ...Option) {
 				Handler:           chain.Then(rootMux),
 				ReadTimeout:       time.Duration(5) * time.Second,
 				ReadHeaderTimeout: time.Duration(2) * time.Second,
+				TLSConfig:         tlsConfigFactory(),
 			}
 
 			if cfg.Insecure {
@@ -294,8 +295,8 @@ func (cfg *Config) logLaunch() {
 	serverList = append(serverList, zap.Int("metrics port", cfg.MetricsListenPort))
 
 	if cfg.Insecure {
-		cfg.logger.Warn("Echo Server listening insecurely on one or more ports", serverList...)
+		cfg.logger.Warn("Server listening insecurely on one or more ports", serverList...)
 	} else {
-		cfg.logger.Info("Echo Server", serverList...)
+		cfg.logger.Info("Server", serverList...)
 	}
 }
