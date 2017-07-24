@@ -23,7 +23,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	xcontext "golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -109,21 +108,6 @@ func WithLogger(l *zap.Logger) Option {
 	}
 }
 
-func grpcEndpointLog(logger *zap.Logger, s string) grpc.UnaryServerInterceptor {
-	return func(ctx xcontext.Context,
-		req interface{},
-		info *grpc.UnaryServerInfo,
-		handler grpc.UnaryHandler) (interface{}, error) {
-		logger.Info("grpcEndpointLog+", zap.String("", s))
-		defer func() {
-			logger.Info("grpcEndpointLog-", zap.String("", s))
-			logger.Sync()
-		}()
-
-		return handler(ctx, req)
-	}
-}
-
 func Run(ctx context.Context, opts ...Option) {
 
 	// default config
@@ -170,6 +154,7 @@ func Run(ctx context.Context, opts ...Option) {
 
 			if cfg.Insecure {
 				cfg.rpcServer = grpc.NewServer(
+					grpc.StreamInterceptor(grpc_prometheus.StreamServerInterceptor),
 					grpc_middleware.WithUnaryServerChain(
 						grpc_prometheus.UnaryServerInterceptor,
 						grpcEndpointLog(cfg.logger, "certMgr")))
@@ -189,6 +174,11 @@ func Run(ctx context.Context, opts ...Option) {
 
 			cfg.RPCRegister(cfg.rpcServer)
 
+			// register w. prometheus
+			grpc_prometheus.Register(cfg.rpcServer)
+			grpc_prometheus.EnableHandlingTimeHistogram()
+
+			// run the server & send an event upon termination
 			errc <- eventSource{
 				err:    cfg.rpcServer.Serve(lis),
 				source: rpcServer,
