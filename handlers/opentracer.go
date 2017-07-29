@@ -60,7 +60,7 @@ func NewTracer(serviceName string) opentracing.Tracer {
 		log.WithError(err).Warn("unable to construct zipkin.Tracer")
 	}
 
-	opentracing.InitGlobalTracer(tracer)
+	opentracing.SetGlobalTracer(tracer)
 
 	return tracer
 }
