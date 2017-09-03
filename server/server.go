@@ -16,10 +16,12 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/grpc-ecosystem/go-grpc-prometheus"
+	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	"github.com/justinas/alice"
 	gsh "github.com/mchudgins/go-service-helper/handlers"
 	"github.com/mchudgins/playground/pkg/healthz"
 	"github.com/mwitkow/go-grpc-middleware"
+	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -47,6 +49,10 @@ type Config struct {
 type Option func(*Config) error
 
 type RPCRegistration func(*grpc.Server) error
+
+const (
+	zipkinHTTPEndpoint = "http://localhost:9411/api/v1/spans"
+)
 
 func WithRPCServer(fn RPCRegistration) Option {
 	return func(cfg *Config) error {
@@ -152,12 +158,15 @@ func Run(ctx context.Context, opts ...Option) {
 				return
 			}
 
+			// configure the RPC server
+
 			if cfg.Insecure {
 				cfg.rpcServer = grpc.NewServer(
 					grpc.StreamInterceptor(grpc_prometheus.StreamServerInterceptor),
 					grpc_middleware.WithUnaryServerChain(
 						grpc_prometheus.UnaryServerInterceptor,
-						grpcEndpointLog(cfg.logger, "certMgr")))
+						otgrpc.OpenTracingServerInterceptor(opentracing.GlobalTracer(), otgrpc.LogPayloads()),
+						grpcEndpointLog(cfg.logger, "Echo RPC Server")))
 			} else {
 				tlsCreds, err := credentials.NewServerTLSFromFile(cfg.CertFilename, cfg.KeyFilename)
 				if err != nil {
@@ -169,6 +178,7 @@ func Run(ctx context.Context, opts ...Option) {
 					grpc.RPCDecompressor(grpc.NewGZIPDecompressor()),
 					grpc_middleware.WithUnaryServerChain(
 						grpc_prometheus.UnaryServerInterceptor,
+						otgrpc.OpenTracingServerInterceptor(opentracing.GlobalTracer(), otgrpc.LogPayloads()),
 						grpcEndpointLog(cfg.logger, "Echo RPC server")))
 			}
 
