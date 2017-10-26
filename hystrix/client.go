@@ -25,7 +25,9 @@ func NewClient(commandName string) *HTTPClient {
 func circuitBreaker(u, commandName string, fn func() (*http.Response, error)) (*http.Response, error) {
 
 	output := make(chan *http.Response, 1)
+	defer close(output)
 	errors := make(chan error, 1)
+	defer close(errors)
 
 	hystrix.Go(commandName, func() error {
 		response, err := fn()
