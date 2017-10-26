@@ -42,6 +42,7 @@ type Config struct {
 	rpcServer         *grpc.Server
 	httpServer        *http.Server
 	metricsServer     *http.Server
+	serviceName       string
 }
 
 type Option func(*Config) error
@@ -67,6 +68,13 @@ func WithCanonicalHost(hostname string) Option {
 	return func(cfg *Config) error {
 		cfg.Hostname = hostname
 
+		return nil
+	}
+}
+
+func WithServiceName(serviceName string) Option {
+	return func(cfg *Config) error {
+		cfg.serviceName = serviceName
 		return nil
 	}
 }
@@ -207,7 +215,7 @@ func Run(ctx context.Context, opts ...Option) {
 			rootMux.PathPrefix("/").Handler(cfg.Handler)
 
 			var tracer func(http.Handler) http.Handler
-			tracer = gsh.TracerFromHTTPRequest(gsh.NewTracer("commandName"), "proxy")
+			tracer = gsh.TracerFromHTTPRequest(gsh.NewTracer(cfg.serviceName), "proxy")
 
 			chain := alice.New(tracer,
 				gsh.HTTPMetricsCollector,

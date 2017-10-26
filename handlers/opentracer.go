@@ -126,7 +126,8 @@ func TracerFromHTTPRequest(tracer opentracing.Tracer, operationName string,
 			}
 
 			var serverSpan opentracing.Span
-			appSpecificOperationName := operationName
+			//			appSpecificOperationName := operationName
+			appSpecificOperationName := req.Method + ":" + req.URL.Path
 			wireContext, err := opentracing.GlobalTracer().Extract(
 				opentracing.HTTPHeaders,
 				opentracing.HTTPHeadersCarrier(req.Header))
