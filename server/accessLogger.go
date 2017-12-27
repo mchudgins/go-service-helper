@@ -15,7 +15,7 @@ func grpcEndpointLog(logger *zap.Logger, s string) grpc.UnaryServerInterceptor {
 		logger.Info("grpcEndpointLog+",
 			zap.String("endpoint", s),
 			zap.String("method", info.FullMethod))
-		md, ok := metadata.FromContext(ctx)
+		md, ok := metadata.FromIncomingContext(ctx)
 		if ok {
 			for key, value := range md {
 				logger.Info("metadata", zap.String(key, value[0]))
