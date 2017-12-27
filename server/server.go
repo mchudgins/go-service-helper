@@ -32,6 +32,7 @@ import (
 type Config struct {
 	Insecure          bool
 	Compress          bool // if true, add compression handling to messages
+	UseZipkin         bool // if true, add zipkin tracing
 	CertFilename      string
 	KeyFilename       string
 	HTTPListenPort    int
@@ -53,21 +54,6 @@ type RPCRegistration func(*grpc.Server) error
 const (
 	zipkinHTTPEndpoint = "http://localhost:9411/api/v1/spans"
 )
-
-func WithRPCServer(fn RPCRegistration) Option {
-	return func(cfg *Config) error {
-		cfg.RPCRegister = fn
-
-		return nil
-	}
-}
-
-func WithHTTPServer(h http.Handler) Option {
-	return func(cfg *Config) error {
-		cfg.Handler = h
-		return nil
-	}
-}
 
 func WithCanonicalHost(hostname string) Option {
 	return func(cfg *Config) error {
@@ -93,9 +79,16 @@ func WithHTTPListenPort(port int) Option {
 	}
 }
 
-func WithRPCListenPort(port int) Option {
+func WithHTTPServer(h http.Handler) Option {
 	return func(cfg *Config) error {
-		cfg.RPCListenPort = port
+		cfg.Handler = h
+		return nil
+	}
+}
+
+func WithLogger(l *zap.Logger) Option {
+	return func(cfg *Config) error {
+		cfg.logger = l
 		return nil
 	}
 }
@@ -107,9 +100,24 @@ func WithMetricsListenPort(port int) Option {
 	}
 }
 
-func WithLogger(l *zap.Logger) Option {
+func WithRPCListenPort(port int) Option {
 	return func(cfg *Config) error {
-		cfg.logger = l
+		cfg.RPCListenPort = port
+		return nil
+	}
+}
+
+func WithRPCServer(fn RPCRegistration) Option {
+	return func(cfg *Config) error {
+		cfg.RPCRegister = fn
+
+		return nil
+	}
+}
+
+func WithZipkinTracer() Option {
+	return func(cfg *Config) error {
+		cfg.UseZipkin = true
 		return nil
 	}
 }
@@ -159,14 +167,22 @@ func Run(ctx context.Context, opts ...Option) {
 			}
 
 			// configure the RPC server
+			var grpcMiddleware grpc.ServerOption
+			if cfg.UseZipkin {
+				grpcMiddleware = grpc_middleware.WithUnaryServerChain(
+					grpc_prometheus.UnaryServerInterceptor,
+					otgrpc.OpenTracingServerInterceptor(opentracing.GlobalTracer(), otgrpc.LogPayloads()),
+					grpcEndpointLog(cfg.logger, "Echo RPC Server"))
+			} else {
+				grpcMiddleware = grpc_middleware.WithUnaryServerChain(
+					grpc_prometheus.UnaryServerInterceptor,
+					grpcEndpointLog(cfg.logger, "Echo RPC Server"))
+			}
 
 			if cfg.Insecure {
 				cfg.rpcServer = grpc.NewServer(
 					grpc.StreamInterceptor(grpc_prometheus.StreamServerInterceptor),
-					grpc_middleware.WithUnaryServerChain(
-						grpc_prometheus.UnaryServerInterceptor,
-						otgrpc.OpenTracingServerInterceptor(opentracing.GlobalTracer(), otgrpc.LogPayloads()),
-						grpcEndpointLog(cfg.logger, "Echo RPC Server")))
+					grpcMiddleware)
 			} else {
 				tlsCreds, err := credentials.NewServerTLSFromFile(cfg.CertFilename, cfg.KeyFilename)
 				if err != nil {
@@ -176,10 +192,7 @@ func Run(ctx context.Context, opts ...Option) {
 					grpc.Creds(tlsCreds),
 					grpc.RPCCompressor(grpc.NewGZIPCompressor()),
 					grpc.RPCDecompressor(grpc.NewGZIPDecompressor()),
-					grpc_middleware.WithUnaryServerChain(
-						grpc_prometheus.UnaryServerInterceptor,
-						otgrpc.OpenTracingServerInterceptor(opentracing.GlobalTracer(), otgrpc.LogPayloads()),
-						grpcEndpointLog(cfg.logger, "Echo RPC server")))
+					grpcMiddleware)
 			}
 
 			cfg.RPCRegister(cfg.rpcServer)
@@ -216,12 +229,15 @@ func Run(ctx context.Context, opts ...Option) {
 
 			rootMux.PathPrefix("/").Handler(cfg.Handler)
 
-			var tracer func(http.Handler) http.Handler
-			tracer = gsh.TracerFromHTTPRequest(gsh.NewTracer("commandName"), "proxy")
-
-			chain := alice.New(tracer,
+			chain := alice.New(
 				gsh.HTTPMetricsCollector,
 				gsh.HTTPLogrusLogger)
+
+			if cfg.UseZipkin {
+				var tracer func(http.Handler) http.Handler
+				tracer = gsh.TracerFromHTTPRequest(gsh.NewTracer("commandName"), "proxy")
+				chain.Append(tracer)
+			}
 
 			if len(cfg.Hostname) > 0 {
 				canonical := handlers.CanonicalHost(cfg.Hostname, http.StatusPermanentRedirect)
@@ -280,7 +296,7 @@ func Run(ctx context.Context, opts ...Option) {
 }
 
 func (cfg *Config) logLaunch() {
-	serverList := make([]zapcore.Field, 0, 5)
+	serverList := make([]zapcore.Field, 0, 10)
 
 	if cfg.RPCRegister != nil {
 		serverList = append(serverList, zap.Int("gRPC port", cfg.RPCListenPort))
@@ -295,7 +311,7 @@ func (cfg *Config) logLaunch() {
 	serverList = append(serverList, zap.Int("metrics port", cfg.MetricsListenPort))
 
 	if cfg.Insecure {
-		cfg.logger.Warn("Server listening insecurely on one or more ports", serverList...)
+		cfg.logger.Info("Server listening insecurely on one or more ports", serverList...)
 	} else {
 		cfg.logger.Info("Server", serverList...)
 	}
