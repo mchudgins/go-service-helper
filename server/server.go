@@ -237,12 +237,7 @@ func Run(ctx context.Context, opts ...Option) {
 
 			rootMux.PathPrefix("/").Handler(cfg.Handler)
 
-			var tracer func(http.Handler) http.Handler
-			tracer = gsh.TracerFromHTTPRequest(gsh.NewTracer(cfg.serviceName), "proxy")
-
-			chain := alice.New(tracer,
-				gsh.HTTPMetricsCollector,
-				gsh.HTTPLogrusLogger)
+			chain := alice.New(gsh.HTTPMetricsCollector, gsh.HTTPLogrusLogger)
 
 			if cfg.UseZipkin {
 				var tracer func(http.Handler) http.Handler
