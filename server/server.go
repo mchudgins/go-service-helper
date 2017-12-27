@@ -45,6 +45,7 @@ type Config struct {
 	rpcServer         *grpc.Server
 	httpServer        *http.Server
 	metricsServer     *http.Server
+	serviceName       string
 }
 
 type Option func(*Config) error
@@ -115,6 +116,13 @@ func WithRPCServer(fn RPCRegistration) Option {
 	}
 }
 
+func WithServiceName(serviceName string) Option {
+	return func(cfg *Config) error {
+		cfg.serviceName = serviceName
+		return nil
+	}
+}
+
 func WithZipkinTracer() Option {
 	return func(cfg *Config) error {
 		cfg.UseZipkin = true
@@ -172,11 +180,11 @@ func Run(ctx context.Context, opts ...Option) {
 				grpcMiddleware = grpc_middleware.WithUnaryServerChain(
 					grpc_prometheus.UnaryServerInterceptor,
 					otgrpc.OpenTracingServerInterceptor(opentracing.GlobalTracer(), otgrpc.LogPayloads()),
-					grpcEndpointLog(cfg.logger, "Echo RPC Server"))
+					grpcEndpointLog(cfg.logger, cfg.serviceName))
 			} else {
 				grpcMiddleware = grpc_middleware.WithUnaryServerChain(
 					grpc_prometheus.UnaryServerInterceptor,
-					grpcEndpointLog(cfg.logger, "Echo RPC Server"))
+					grpcEndpointLog(cfg.logger, cfg.serviceName))
 			}
 
 			if cfg.Insecure {
@@ -229,7 +237,10 @@ func Run(ctx context.Context, opts ...Option) {
 
 			rootMux.PathPrefix("/").Handler(cfg.Handler)
 
-			chain := alice.New(
+			var tracer func(http.Handler) http.Handler
+			tracer = gsh.TracerFromHTTPRequest(gsh.NewTracer(cfg.serviceName), "proxy")
+
+			chain := alice.New(tracer,
 				gsh.HTTPMetricsCollector,
 				gsh.HTTPLogrusLogger)
 
