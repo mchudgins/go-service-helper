@@ -18,6 +18,7 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	"github.com/justinas/alice"
+	"github.com/mchudgins/go-service-helper/correlationID"
 	gsh "github.com/mchudgins/go-service-helper/handlers"
 	"github.com/mchudgins/playground/pkg/healthz"
 	"github.com/mwitkow/go-grpc-middleware"
@@ -242,7 +243,23 @@ func Run(ctx context.Context, opts ...Option) {
 			if cfg.UseZipkin {
 				var tracer func(http.Handler) http.Handler
 				tracer = gsh.TracerFromHTTPRequest(gsh.NewTracer("commandName"), "proxy")
-				chain.Append(tracer)
+				chain = chain.Append(tracer)
+			} else {
+				chain = chain.Append(func(next http.Handler) http.Handler {
+					return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+
+						// tag this request with a correlation ID, so we can troubleshoot it later, if necessary
+						req, corrID, fExisted := correlationID.FromRequest(req)
+
+						// if we're at the edge of the system, send the correlation ID back in the response
+						if !fExisted {
+							w.Header().Set(correlationID.CORRID, corrID)
+						}
+
+						next.ServeHTTP(w, req)
+					})
+
+				})
 			}
 
 			if len(cfg.Hostname) > 0 {
