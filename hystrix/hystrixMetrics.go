@@ -150,6 +150,10 @@ func (h *hystrixHelper) Reset() {
 	log.Debug("HystrixHelper reset called")
 }
 
+func (h *hystrixHelper) Update(mr metricCollector.MetricResult) {
+	log.Debug("HystrixHelper.Update called")
+}
+
 func (h *hystrixHelper) NewPrometheusCollector(name string) metricCollector.MetricCollector {
 	return h
 }
