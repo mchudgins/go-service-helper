@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/apache/thrift/lib/go/thrift"
-	zipkin "github.com/openzipkin/zipkin-go-opentracing"
-	"github.com/openzipkin/zipkin-go-opentracing/thrift/gen-go/zipkincore"
+	zipkin "github.com/openzipkin-contrib/zipkin-go-opentracing"
+	"github.com/openzipkin-contrib/zipkin-go-opentracing/thrift/gen-go/zipkincore"
 )
 
 // Default timeout for http request in seconds

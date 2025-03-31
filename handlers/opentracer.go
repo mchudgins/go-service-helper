@@ -10,7 +10,7 @@ import (
 	"github.com/mchudgins/go-service-helper/zipkin"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
-	openzipkin "github.com/openzipkin/zipkin-go-opentracing"
+	openzipkin "github.com/openzipkin-contrib/zipkin-go-opentracing"
 	//zlog "github.com/opentracing/opentracing-go/log"
 )
 
