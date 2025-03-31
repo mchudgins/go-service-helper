@@ -3,7 +3,7 @@ package hystrix
 import (
 	"time"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/afex/hystrix-go/hystrix/metric_collector"
 	"github.com/prometheus/client_golang/prometheus"
 )

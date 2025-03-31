@@ -12,7 +12,7 @@ import (
 	"sort"
 	"sync"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/golang/gddo/httputil/header"
 )
 

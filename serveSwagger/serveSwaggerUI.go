@@ -3,7 +3,7 @@ package serveSwagger
 import (
 	"net/http"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 // This package serves up the Swagger UI at the designated path

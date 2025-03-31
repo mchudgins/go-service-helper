@@ -3,7 +3,7 @@ package handlers
 import (
 	"net/http"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/mchudgins/go-service-helper/correlationID"
 	"github.com/mchudgins/go-service-helper/httpWriter"
 	"github.com/mchudgins/go-service-helper/hystrix"
